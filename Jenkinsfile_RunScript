@@ -1,0 +1,53 @@
+bitcoin_networks = ['regtest', 'testnet', 'mainnet']
+environments = ['dev', 'qa', 'stag', 'prod', 'demo']
+databases = ['eventstream', 'customer', 'funding', 'smartcontracts', 'billing']
+
+
+pipeline {
+    agent {
+        kubernetes {
+            defaultContainer 'dbconfig'
+            idleMinutes 1
+            yamlFile 'KubernetesPod.yml'
+        }
+    }
+    parameters {
+            choice(name: 'BTC_NETWORK', choices: bitcoin_networks, description: 'Select the deployment Bitcoin Network')
+            choice(name: 'DEPLOYMENT_ENVIRONMENT', choices: environments, description: 'Select the environment type')
+            choice(name: 'DB_NAME', choices: databases, description: 'Select the database')
+            string(name: 'RUN_SCRIPT', defaultValue: '', trim: true, description: 'Standalone Script to run in Standalone_scripts folder')
+    }
+    environment {
+        AWS_ACCESS_KEY_ID = credentials('jenkins-aws-access-key-id')
+        AWS_SECRET_ACCESS_KEY = credentials('jenkins-aws-secret-key-id')
+        AWS_DEFAULT_REGION = "eu-west-1"
+    }
+    stages {
+        stage ("Deploy") {
+            steps {
+                script {
+                    withCredentials([string(credentialsId: "ps-db-${DEPLOYMENT_ENVIRONMENT}", variable: 'PG_PASSWORD'),
+                                     string(credentialsId: "ps-db-${DEPLOYMENT_ENVIRONMENT}-rw", variable: 'RW_PWD'),
+                                     string(credentialsId: "ps-db-${DEPLOYMENT_ENVIRONMENT}-ro", variable: 'RO_PWD')
+                    ]) {
+                        sh "chmod +x Standalone_scripts/*.sh"
+                        sh '''
+                           set +o posix
+                           set +x
+                           #set -xv
+
+                           export RW_PWD
+                           export RO_PWD
+
+                           cd Standalone_scripts
+                           cmd="./wrapper.sh -p ${PG_PASSWORD} -d ${DB_NAME} -n ${BTC_NETWORK} -e ${DEPLOYMENT_ENVIRONMENT} -r ${RUN_SCRIPT}"
+
+                           echo $cmd
+                           $cmd
+                           '''
+                    }
+                }
+            }
+        }
+    }
+}

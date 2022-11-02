@@ -1,0 +1,21 @@
+pipelines:
+  pull-requests:
+    '**': #this runs as default for any branch not elsewhere defined
+      - step:
+          script:
+            - chmod +x *.sh
+            - ./VersionChecks.sh
+      - step:
+          image: postgres:12.5-alpine
+          script:
+            - chmod +x *.sh
+            - ./TestDeployAllDatabasesDocker.sh
+          services:
+            - postgres
+
+definitions:
+  services:
+    postgres:
+      image: postgres:12.5-alpine
+      variables:
+        POSTGRES_HOST_AUTH_METHOD: 'trust'
